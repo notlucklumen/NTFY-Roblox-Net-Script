@@ -46,7 +46,8 @@ local httpService = game:GetService('HttpService')
 local player = players.LocalPlayer
 
 local args = {...}
-local topic = args[1] -- loadstring returns a vararg, loadstring(code)(arguments)
+local topic = args.topic or nil -- loadstring returns a vararg, loadstring(code)(arguments)
+local debugging = args.debug or false
 
 local Net = {}
 
@@ -68,7 +69,9 @@ do
 
     function Net.send(kind, payload)
         if not requestFn then
-            print('ntfy: no request function')
+            if debugging then
+                print('ntfy: no request function')
+            end
             return
         end
 
@@ -82,7 +85,9 @@ do
                     payload = payload,
                 }),
             })
-            print('ntfy send', kind, ok, ok and response and (response.StatusCode or response.Status))
+            if debugging then
+                print('ntfy send', kind, ok, ok and response and (response.StatusCode or response.Status))
+            end
         end)
     end
 
