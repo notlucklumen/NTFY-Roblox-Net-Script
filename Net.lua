@@ -45,9 +45,8 @@ local httpService = game:GetService('HttpService')
 
 local player = players.LocalPlayer
 
-local opts = ({...})[1] or {}
-local topic = opts.topic
-local debugging = opts.debug or false
+local topic = ...
+local debugging = false --fuck you fuck you fuck you fuck you
 
 local Net = {}
 
