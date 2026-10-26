@@ -45,9 +45,9 @@ local httpService = game:GetService('HttpService')
 
 local player = players.LocalPlayer
 
-local args = {...}
-local topic = args.topic or nil -- loadstring returns a vararg, loadstring(code)(arguments)
-local debugging = args.debug or false
+local opts = ({...})[1] or {}
+local topic = opts.topic
+local debugging = opts.debug or false
 
 local Net = {}
 
