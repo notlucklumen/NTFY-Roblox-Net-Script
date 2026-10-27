@@ -47,6 +47,7 @@ local player = players.LocalPlayer
 
 local topic = ...
 local debugging = false --fuck you fuck you fuck you fuck you
+print(topic) -- PRINT YOU FUCKER
 
 local Net = {}
 
