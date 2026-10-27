@@ -1,3 +1,5 @@
+repeat task.wait() until game:IsLoaded()
+
 function rootClean(v)
     if type(v) == 'function' then
         pcall(v)
@@ -40,71 +42,62 @@ function clean(obj, boolFunc)
     return obj
 end
 
-local players = game:GetService('Players')
+local playersService = game:GetService('Players')
 local httpService = game:GetService('HttpService')
 
-local player = players.LocalPlayer
+local lplr = playersService.LocalPlayer
 
-local topic = ...
-local debugging = false --fuck you fuck you fuck you fuck you
-print(topic) -- PRINT YOU FUCKER
-
-local Net = {}
+local net = {}
 
 do
-    local baseUrl = 'https://ntfy.sh/' .. topic
+    local topic = ...
+    local base = 'https://ntfy.sh/' .. topic
+
     local requestFn = request or http_request or (syn and syn.request) or (http and http.request)
-    local handlers = {}
     local running = true
+    local handlers = {}
 
     clean(function()
         running = false
     end)
 
-    function Net.receive(kind, callback)
-        handlers[kind] = callback
+    function net.on(kind, fn)
+        handlers[kind] = fn
     end
 
-    Net.on = Net.receive
+    net.recieve = net.on -- you can't spell
+    net.receive = net.on
 
-    function Net.send(kind, payload)
+    function net.send(kind, payload)
         if not requestFn then
-            if debugging then
-                print('ntfy: no request function')
-            end
+            print('ntfy: no request function')
             return
         end
-
         task.spawn(function()
-            local ok, response = pcall(requestFn, {
-                Url = baseUrl,
+            local ok, res = pcall(requestFn, {
+                Url = base,
                 Method = 'POST',
                 Body = httpService:JSONEncode({
                     type = kind,
-                    from = player.Name,
-                    payload = payload,
-                }),
+                    from = lplr.Name,
+                    payload = payload
+                })
             })
-            if debugging then
-                print('ntfy send', kind, ok, ok and response and (response.StatusCode or response.Status))
-            end
+            print('ntfy send', kind, ok, ok and res and (res.StatusCode or res.Status))
         end)
     end
 
-    local function handleMessage(raw)
-        local ok, event = pcall(httpService.JSONDecode, httpService, raw)
-        if not ok or type(event) ~= 'table' or event.event ~= 'message' then
-            return
-        end
+    local function handle(raw)
+        local ok, event = pcall(function()
+            return httpService:JSONDecode(raw)
+        end)
+        if not ok or type(event) ~= 'table' or event.event ~= 'message' then return end
 
-        local ok2, data = pcall(httpService.JSONDecode, httpService, event.message)
-        if not ok2 or type(data) ~= 'table' then
-            return
-        end
-
-        if data.from == player.Name then
-            return
-        end
+        local ok2, data = pcall(function()
+            return httpService:JSONDecode(event.message)
+        end)
+        if not ok2 or type(data) ~= 'table' then return end
+        if data.from == lplr.Name then return end
 
         local handler = handlers[data.type]
         if handler then
@@ -112,55 +105,44 @@ do
         end
     end
 
-    local function startWebSocket()
-        if not (WebSocket and WebSocket.connect) then
-            return false
-        end
+    local connected = false
 
+    if WebSocket and WebSocket.connect then
         local ok, socket = pcall(WebSocket.connect, 'wss://ntfy.sh/' .. topic .. '/ws')
-        if not ok or not socket then
-            return false
+        if ok and socket then
+            connected = true
+            socket.OnMessage:Connect(handle)
+            clean(function()
+                pcall(function() socket:Close() end)
+            end)
         end
-
-        socket.OnMessage:Connect(handleMessage)
-        clean(function()
-            pcall(function() socket:Close() end)
-        end)
-        return true
     end
 
-    local function startPolling()
-        if not requestFn then
-            return
-        end
+    print(connected and 'net: websocket' or 'net: polling')
 
+    if not connected and requestFn then
         task.spawn(function()
             local since = tostring(os.time())
-
             while running do
-                local ok, response = pcall(requestFn, {
-                    Url = baseUrl .. '/json?poll=1&since=' .. since,
-                    Method = 'GET',
+                local ok, res = pcall(requestFn, {
+                    Url = base .. '/json?poll=1&since=' .. since,
+                    Method = 'GET'
                 })
-
-                if ok and response and response.Body then
-                    for line in string.gmatch(response.Body, '[^\n]+') do
-                        local ok2, event = pcall(httpService.JSONDecode, httpService, line)
+                if ok and res and res.Body then
+                    for line in string.gmatch(res.Body, '[^\n]+') do
+                        local ok2, event = pcall(function()
+                            return httpService:JSONDecode(line)
+                        end)
                         if ok2 and type(event) == 'table' and event.id then
                             since = event.id
-                            handleMessage(line)
+                            handle(line)
                         end
                     end
                 end
-
                 task.wait(2)
             end
         end)
     end
-
-    if not startWebSocket() then
-        startPolling()
-    end
 end
 
-return Net
+return net
